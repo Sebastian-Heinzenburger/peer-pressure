@@ -1,0 +1,31 @@
+name: Rust CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    container:
+      image: rust:1.91
+
+    steps:
+      - name: Install Node (required for JS actions)
+        run: |
+          apt-get update
+          apt-get install -y nodejs npm
+
+      - name: Checkout
+        uses: https://code.forgejo.org/actions/checkout@v6
+
+      - name: Install Clippy
+        run: rustup component add clippy
+
+      - name: Build
+        run: cargo build --verbose
+
+      - name: Run Clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings

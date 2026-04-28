@@ -1,0 +1,13 @@
+[package]
+name = "presentation"
+version = "0.1.0"
+edition = "2024"
+[dependencies]
+application = { path = "../02_application" }
+domain = { path = "../01_domain" }
+clap = { version = "4", features = ["derive"] }
+ratatui = "0.29"
+crossterm = { version = "0.28", features = ["event-stream"] }
+tokio = { version = "1", features = ["full"] }
+anyhow = "1"
+futures = "0.3"

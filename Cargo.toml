@@ -1,0 +1,17 @@
+[workspace]
+members = ["01_domain", "02_application", "03_infrastructure", "04_presentation"]
+resolver = "2"
+
+[package]
+name = "peer-pressure"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+domain = { path = "01_domain" }
+application = { path = "02_application" }
+infrastructure = { path = "03_infrastructure" }
+presentation = { path = "04_presentation" }
+tokio = { version = "1", features = ["full"] }
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
