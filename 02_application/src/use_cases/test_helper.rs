@@ -10,8 +10,9 @@ use domain::message::ChatMessage;
 use domain::peer::{Peer, PeerAddress, PeerId};
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::{RwLock, RwLockReadGuard};
+use tokio::sync::RwLock;
 
+#[derive(Default)]
 pub struct MockEventSender {
     events: Arc<RwLock<Vec<AppEvent>>>,
 }
@@ -24,25 +25,28 @@ impl EventSender for MockEventSender {
 }
 
 impl MockEventSender {
+    #[cfg(test)]
+    pub async fn get_events(&self) -> Vec<AppEvent> {
+        self.events.read().await.clone()
+    }
+}
+
+impl MockEventSender {
     pub fn new() -> Self {
         Self {
             events: Arc::new(RwLock::new(vec![])),
         }
     }
-    pub(crate) async fn get(&self) -> RwLockReadGuard<'_, Vec<AppEvent>> {
-        self.events.read().await
-    }
 }
 
+#[derive(Default)]
 pub struct MockPeerRepository {
     peers: RwLock<HashMap<PeerAddress, Peer>>,
 }
 
 impl MockPeerRepository {
     pub fn new() -> Self {
-        MockPeerRepository {
-            peers: RwLock::new(HashMap::new()),
-        }
+        Default::default()
     }
 }
 
@@ -71,15 +75,14 @@ impl PeerRepository for MockPeerRepository {
     }
 }
 
+#[derive(Default)]
 pub struct MockChatRepository {
     chats: RwLock<HashMap<String, Chat>>,
 }
 
 impl MockChatRepository {
     pub fn new() -> Self {
-        Self {
-            chats: RwLock::new(HashMap::new()),
-        }
+        Default::default()
     }
 
     pub async fn get_chat(&self, peer: &PeerId) -> Option<Chat> {
@@ -87,10 +90,7 @@ impl MockChatRepository {
     }
 
     pub async fn set_chat(&self, chat: Chat) {
-        self.chats
-            .write()
-            .await
-            .insert(chat.peer.to_string(), chat);
+        self.chats.write().await.insert(chat.peer.to_string(), chat);
     }
 }
 
@@ -101,10 +101,7 @@ impl ChatRepository for MockChatRepository {
     }
 
     async fn save(&self, chat: Chat) -> Result<(), RepositoryError> {
-        self.chats
-            .write()
-            .await
-            .insert(chat.peer.to_string(), chat);
+        self.chats.write().await.insert(chat.peer.to_string(), chat);
         Ok(())
     }
 
@@ -113,6 +110,7 @@ impl ChatRepository for MockChatRepository {
     }
 }
 
+#[derive(Default)]
 pub struct MockMessageSenderService {
     pub should_fail: RwLock<bool>,
     pub sent: RwLock<Vec<(PeerAddress, ChatMessage)>>,
@@ -121,11 +119,7 @@ pub struct MockMessageSenderService {
 
 impl MockMessageSenderService {
     pub fn new() -> Self {
-        Self {
-            should_fail: RwLock::new(false),
-            sent: RwLock::new(vec![]),
-            connected: RwLock::new(vec![]),
-        }
+        Default::default()
     }
 
     pub fn failing() -> Self {
@@ -141,7 +135,9 @@ impl MockMessageSenderService {
 impl MessageSenderService for MockMessageSenderService {
     async fn connect(&self, peer: PeerAddress) -> Result<(), ConnectionServiceError> {
         if *self.should_fail.read().await {
-            return Err(ConnectionServiceError::ConnectionError("mock failure".into()));
+            return Err(ConnectionServiceError::ConnectionError(
+                "mock failure".into(),
+            ));
         }
         self.connected.write().await.push(peer);
         Ok(())

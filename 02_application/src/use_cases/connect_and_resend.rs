@@ -78,7 +78,9 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::use_cases::test_helper::{MockChatRepository, MockEventSender, MockMessageSenderService};
+    use crate::use_cases::test_helper::{
+        MockChatRepository, MockEventSender, MockMessageSenderService,
+    };
     use domain::message::MessageContent;
     use domain::peer::PeerAddress;
 
@@ -108,9 +110,16 @@ mod tests {
         uc.execute(peer.clone()).await.unwrap();
 
         let chat = chat_repo.get_chat(&peer).await.unwrap();
-        assert!(chat.messages.iter().all(|m| m.delivery_status() == &DeliveryStatus::Sent));
+        assert!(
+            chat.messages
+                .iter()
+                .all(|m| m.delivery_status() == &DeliveryStatus::Sent)
+        );
         assert_eq!(sender.sent.read().await.len(), 2);
-        assert_eq!(events.get().await[0], AppEvent::MessagesDelivered { peer });
+        assert_eq!(
+            events.get_events().await[0],
+            AppEvent::MessagesDelivered { peer }
+        );
     }
 
     #[tokio::test]
@@ -141,6 +150,6 @@ mod tests {
 
         let result = uc.execute(peer).await;
         assert!(result.is_err());
-        assert!(events.get().await.is_empty());
+        assert!(events.get_events().await.is_empty());
     }
 }

@@ -9,12 +9,14 @@ pub struct DisplayMessage {
     pub delivered: bool,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Default, Debug, Clone, PartialEq)]
 pub enum InputMode {
+    #[default]
     Normal,
     Editing,
 }
 
+#[derive(Default)]
 pub struct TuiAppState {
     pub peers: Vec<PeerId>,
     pub connected_peers: HashSet<PeerId>,

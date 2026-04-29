@@ -41,7 +41,7 @@ where
     async fn persist_message_to_chat(&self, from: &PeerAddress, message: ChatMessage) {
         let mut chat = self
             .chat_repository
-            .get(&from)
+            .get(from)
             .await
             .ok()
             .flatten()
@@ -83,7 +83,10 @@ mod tests {
         assert_eq!(chat.messages[0].sent_by(), &SentBy::Peer);
         assert_eq!(chat.messages[0].delivery_status(), &DeliveryStatus::Sent);
 
-        let evts = events.get().await;
-        assert_eq!(evts[0], AppEvent::MessageReceived { peer, content });
+        let received_events = events.get_events().await;
+        assert_eq!(
+            received_events[0],
+            AppEvent::MessageReceived { peer, content }
+        );
     }
 }

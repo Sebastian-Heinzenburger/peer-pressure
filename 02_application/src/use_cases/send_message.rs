@@ -70,7 +70,7 @@ where
     ) -> Result<(), RepositoryError> {
         let mut chat = self
             .chat_repository
-            .get(&peer)
+            .get(peer)
             .await?
             .unwrap_or_else(|| Chat::create(peer.clone()));
         chat.add_message(message);
@@ -81,7 +81,9 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::use_cases::test_helper::{MockChatRepository, MockEventSender, MockMessageSenderService};
+    use crate::use_cases::test_helper::{
+        MockChatRepository, MockEventSender, MockMessageSenderService,
+    };
     use domain::message::DeliveryStatus;
     use domain::peer::PeerAddress;
 
@@ -100,12 +102,15 @@ mod tests {
         assert_eq!(chat.messages[0].delivery_status(), &DeliveryStatus::Sent);
         assert_eq!(sender.sent.read().await.len(), 1);
 
-        let evts = events.get().await;
-        assert_eq!(evts[0], AppEvent::MessageSent {
-            peer,
-            content: MessageContent::Text("hello".into()),
-            delivered: true,
-        });
+        let evts = events.get_events().await;
+        assert_eq!(
+            evts[0],
+            AppEvent::MessageSent {
+                peer,
+                content: MessageContent::Text("hello".into()),
+                delivered: true,
+            }
+        );
     }
 
     #[tokio::test]
@@ -121,11 +126,14 @@ mod tests {
         let chat = chat_repo.get_chat(&peer).await.unwrap();
         assert_eq!(chat.messages[0].delivery_status(), &DeliveryStatus::NotSent);
 
-        let evts = events.get().await;
-        assert_eq!(evts[0], AppEvent::MessageSent {
-            peer,
-            content: MessageContent::Text("hello".into()),
-            delivered: false,
-        });
+        let received_events = events.get_events().await;
+        assert_eq!(
+            received_events[0],
+            AppEvent::MessageSent {
+                peer,
+                content: MessageContent::Text("hello".into()),
+                delivered: false,
+            }
+        );
     }
 }

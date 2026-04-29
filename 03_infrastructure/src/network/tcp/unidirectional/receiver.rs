@@ -33,7 +33,7 @@ impl TcpInboundListener {
         ip: IpAddr,
         port: TcpPort,
         inbound_message_handler: Arc<dyn InboundMessageReceiver>,
-        event_sender: Arc<dyn EventSender>,
+        _event_sender: Arc<dyn EventSender>,
     ) -> Self {
         Self {
             ip,
@@ -77,7 +77,7 @@ impl TcpInboundListener {
         let text = String::from_utf8(bytes.to_vec()).map_err(|_| ())?;
         let WireMessage::ChatMessage(wm) =
             serde_json::from_str::<WireMessage>(&text).map_err(|_| ())?;
-        let content = MessageContent::try_from(wm.content).map_err(|_| ())?;
+        let content = MessageContent::from(wm.content);
         handler.receive_message(peer_address.clone(), content).await;
         Ok(())
     }

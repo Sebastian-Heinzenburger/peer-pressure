@@ -144,7 +144,7 @@ async fn command_processing_loop(
         TcpOutboundConnectionService,
         BroadcastEventBus,
     >,
-    sender_service: Arc<TcpOutboundConnectionService>,
+    _sender_service: Arc<TcpOutboundConnectionService>,
 ) {
     while let Some(cmd) = command_rx.recv().await {
         match cmd {

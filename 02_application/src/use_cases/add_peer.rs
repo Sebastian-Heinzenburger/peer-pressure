@@ -43,7 +43,7 @@ mod tests {
     #[tokio::test]
     async fn add_peer_success() {
         let mock_peer_repository = Arc::new(MockPeerRepository::new());
-        let mock_event_sender = Arc::new(MockEventSender::new());
+        let mock_event_sender = Arc::new(MockEventSender::default());
         let add_peer = AddPeer::new(mock_peer_repository.clone(), mock_event_sender.clone());
         let peer_address = PeerAddress::new("peer1".into());
         add_peer.execute(peer_address.clone()).await.unwrap();
@@ -56,7 +56,7 @@ mod tests {
         assert_eq!(retrieved_peer.address(), peer_address);
 
         let events = mock_event_sender
-            .get()
+            .get_events()
             .await
             .iter()
             .cloned()
@@ -67,14 +67,14 @@ mod tests {
     #[tokio::test]
     async fn add_peer_already_exists() {
         let mock_peer_repository = Arc::new(MockPeerRepository::new());
-        let mock_event_sender = Arc::new(MockEventSender::new());
+        let mock_event_sender = Arc::new(MockEventSender::default());
         let add_peer = AddPeer::new(mock_peer_repository.clone(), mock_event_sender.clone());
         let peer_address = PeerAddress::new("peer1".into());
         let result1 = add_peer.execute(peer_address.clone()).await;
         assert!(result1.is_ok());
-        assert_eq!(mock_event_sender.get().await.len(), 1);
+        assert_eq!(mock_event_sender.get_events().await.len(), 1);
         let result2 = add_peer.execute(peer_address.clone()).await;
         assert!(result2.is_err());
-        assert_eq!(mock_event_sender.get().await.len(), 1);
+        assert_eq!(mock_event_sender.get_events().await.len(), 1);
     }
 }

@@ -86,7 +86,7 @@ impl FileChatRepository {
         peer_address: &String,
         chat: &Chat,
     ) -> Result<(), RepositoryError> {
-        let dir = self.data_dir.join("peers").join(&peer_address);
+        let dir = self.data_dir.join("peers").join(peer_address);
         tokio::fs::create_dir_all(&dir)
             .await
             .map_err(|e| RepositoryError::PersistenceError(e.to_string()))?;
@@ -95,7 +95,7 @@ impl FileChatRepository {
         let json = serde_json::to_string_pretty(&dto)
             .map_err(|e| RepositoryError::PersistenceError(e.to_string()))?;
 
-        tokio::fs::write(self.messages_file(&peer_address), json)
+        tokio::fs::write(self.messages_file(peer_address), json)
             .await
             .map_err(|e| RepositoryError::PersistenceError(e.to_string()))?;
         Ok(())
