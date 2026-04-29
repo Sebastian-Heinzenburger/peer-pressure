@@ -63,7 +63,7 @@ fn render_peer_list(frame: &mut Frame, app: &TuiAppState, area: Rect) {
 fn render_chat(frame: &mut Frame, app: &TuiAppState, area: Rect) {
     let title = app
         .selected_peer_id()
-        .map(|p| format!(" Chat: {} ", p))
+        .map(|p| format!(" Chat with {} ", p))
         .unwrap_or_else(|| " No peer selected ".to_string());
 
     let messages = app.current_messages();

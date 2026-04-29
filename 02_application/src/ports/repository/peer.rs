@@ -3,7 +3,7 @@ use async_trait::async_trait;
 use domain::peer::{Peer, PeerId};
 
 #[async_trait]
-pub trait PeerRepository {
+pub trait PeerRepository: Send + Sync {
     async fn add(&self, peer: Peer) -> Result<(), RepositoryError>;
 
     async fn get(&self, id: &PeerId) -> Result<Option<Peer>, RepositoryError>;

@@ -5,17 +5,16 @@ use crate::ports::repository::peer::PeerRepository;
 use domain::peer::{Peer, PeerAddress};
 use std::sync::Arc;
 
-pub struct AddPeer<P: PeerRepository, E: EventSender> {
-    peer_repository: Arc<P>,
-    event_sender: Arc<E>,
+pub struct AddPeer {
+    peer_repository: Arc<dyn PeerRepository>,
+    event_sender: Arc<dyn EventSender>,
 }
 
-impl<P, E> AddPeer<P, E>
-where
-    P: PeerRepository,
-    E: EventSender,
-{
-    pub fn new(peer_repository: Arc<P>, event_sender: Arc<E>) -> Self {
+impl AddPeer {
+    pub fn new(
+        peer_repository: Arc<dyn PeerRepository>,
+        event_sender: Arc<dyn EventSender>,
+    ) -> Self {
         Self {
             peer_repository,
             event_sender,

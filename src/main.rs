@@ -63,10 +63,10 @@ async fn main() -> anyhow::Result<()> {
         event_bus.clone() as Arc<BroadcastEventBus>,
     );
 
-    let add_peer_uc = AddPeer::new(
+    let add_peer_uc = Arc::new(AddPeer::new(
         peer_repo.clone() as Arc<FilePeerRepository>,
         event_bus.clone() as Arc<BroadcastEventBus>,
-    );
+    ));
 
     let connect_and_resend_uc = ConnectAndResend::new(
         chat_repo.clone() as Arc<FileChatRepository>,
@@ -81,6 +81,7 @@ async fn main() -> anyhow::Result<()> {
         cli.port,
         receive_message as Arc<dyn InboundMessageReceiver>,
         event_bus.clone() as Arc<dyn EventSender>,
+        add_peer_uc.clone(),
     );
 
     // Command channel (TUI -> main)
@@ -146,7 +147,7 @@ async fn command_processing_loop(
         TcpOutboundConnectionService,
         BroadcastEventBus,
     >,
-    add_peer_uc: AddPeer<FilePeerRepository, BroadcastEventBus>,
+    add_peer_uc: Arc<AddPeer>,
     connect_and_resend_uc: ConnectAndResend<
         FileChatRepository,
         TcpOutboundConnectionService,

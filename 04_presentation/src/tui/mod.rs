@@ -1,5 +1,5 @@
-use app_state::TuiAppState;
 use crate::user_command::UserCommand;
+use app_state::TuiAppState;
 use application::events::AppEvent;
 use crossterm::event::{Event, EventStream};
 use crossterm::execute;
@@ -13,10 +13,10 @@ use std::io;
 use tokio::sync::{broadcast, mpsc};
 use tokio::time::{interval, Duration};
 
-pub mod ui;
-pub mod app_state;
 pub mod app_event_handler;
+pub mod app_state;
 pub mod input_handler;
+pub mod ui;
 
 pub async fn run(
     mut app: TuiAppState,
