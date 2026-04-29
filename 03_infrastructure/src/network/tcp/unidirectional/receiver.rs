@@ -1,14 +1,15 @@
 use crate::network::tcp::TcpPort;
-use crate::network::wire_protocol::{WireChatMessageContent, WireMessage};
-use application::events::AppEvent;
+use crate::network::wire_protocol::WireMessage;
 use application::ports::event_sender::EventSender;
-use application::ports::inbound_message_handler::InboundMessageHandler;
+use application::ports::inbound_message_handler::InboundMessageReceiver;
+use domain::message::MessageContent;
 use domain::peer::PeerAddress;
 use futures::StreamExt;
 use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::task;
+use tokio_util::bytes::BytesMut;
 use tokio_util::codec::{Framed, LengthDelimitedCodec};
 
 #[derive(Debug, thiserror::Error)]
@@ -24,22 +25,20 @@ pub enum TcpInboundListenerError {
 pub struct TcpInboundListener {
     ip: IpAddr,
     port: TcpPort,
-    handler: Arc<dyn InboundMessageHandler>,
-    event_sender: Arc<dyn EventSender>,
+    inbound_message_handler: Arc<dyn InboundMessageReceiver>,
 }
 
 impl TcpInboundListener {
     pub fn new(
         ip: IpAddr,
         port: TcpPort,
-        handler: Arc<dyn InboundMessageHandler>,
+        inbound_message_handler: Arc<dyn InboundMessageReceiver>,
         event_sender: Arc<dyn EventSender>,
     ) -> Self {
         Self {
             ip,
             port,
-            handler,
-            event_sender,
+            inbound_message_handler,
         }
     }
 
@@ -47,10 +46,9 @@ impl TcpInboundListener {
         let listener = self.bind().await?;
 
         while let Ok((stream, addr)) = listener.accept().await {
-            let handler = self.handler.clone();
-            let event_sender = self.event_sender.clone();
+            let handler = self.inbound_message_handler.clone();
             task::spawn(async move {
-                Self::handle_connection(stream, addr, handler, event_sender).await;
+                Self::handle_connection(stream, addr, handler).await;
             });
         }
 
@@ -60,44 +58,37 @@ impl TcpInboundListener {
     async fn handle_connection(
         stream: TcpStream,
         addr: SocketAddr,
-        handler: Arc<dyn InboundMessageHandler>,
-        event_sender: Arc<dyn EventSender>,
+        handler: Arc<dyn InboundMessageReceiver>,
     ) {
         let peer_address = PeerAddress::new(addr.ip().to_string().into());
-        event_sender
-            .send(AppEvent::PeerConnected(peer_address.clone()))
-            .await;
 
         let mut framed = Framed::new(stream, LengthDelimitedCodec::new());
         while let Some(Ok(bytes)) = framed.next().await {
-            if let Ok(text) = String::from_utf8(bytes.to_vec()) {
-                if let Ok(wire_msg) = serde_json::from_str::<WireMessage>(&text) {
-                    match wire_msg {
-                        WireMessage::ChatMessage(wm) => {
-                            let content_text = match wm.content {
-                                WireChatMessageContent::Text(t) => t,
-                            };
-                            handler
-                                .handle_message(peer_address.clone(), content_text)
-                                .await;
-                        }
-                    }
-                }
-            }
+            let handler = handler.clone();
+            let _ignored = Self::handle_message(handler, &peer_address, bytes).await;
         }
+    }
 
-        event_sender
-            .send(AppEvent::PeerDisconnected(peer_address))
-            .await;
+    async fn handle_message(
+        handler: Arc<dyn InboundMessageReceiver>,
+        peer_address: &PeerAddress,
+        bytes: BytesMut,
+    ) -> Result<(), ()> {
+        let text = String::from_utf8(bytes.to_vec()).map_err(|_| ())?;
+        let WireMessage::ChatMessage(wm) =
+            serde_json::from_str::<WireMessage>(&text).map_err(|_| ())?;
+        let content = MessageContent::try_from(wm.content).map_err(|_| ())?;
+        handler.receive_message(peer_address.clone(), content).await;
+        Ok(())
     }
 
     async fn bind(&self) -> Result<TcpListener, TcpInboundListenerError> {
-        TcpListener::bind((self.ip, self.port))
-            .await
-            .map_err(|e| TcpInboundListenerError::BindError {
+        TcpListener::bind((self.ip, self.port)).await.map_err(|e| {
+            TcpInboundListenerError::BindError {
                 ip: self.ip,
                 port: self.port,
                 reason: e.to_string(),
-            })
+            }
+        })
     }
 }

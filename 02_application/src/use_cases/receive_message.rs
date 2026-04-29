@@ -1,6 +1,6 @@
 use crate::events::AppEvent;
 use crate::ports::event_sender::EventSender;
-use crate::ports::inbound_message_handler::InboundMessageHandler;
+use crate::ports::inbound_message_handler::InboundMessageReceiver;
 use crate::ports::repository::chat::ChatRepository;
 use async_trait::async_trait;
 use domain::chat::Chat;
@@ -14,17 +14,14 @@ pub struct ReceiveMessage<C: ChatRepository, E: EventSender> {
 }
 
 #[async_trait]
-impl<C, E> InboundMessageHandler for ReceiveMessage<C, E>
+impl<C, E> InboundMessageReceiver for ReceiveMessage<C, E>
 where
     C: ChatRepository + Send + Sync,
     E: EventSender + Send + Sync,
 {
-    async fn handle_message(&self, from: PeerAddress, text: String) {
-        let content = MessageContent::Text(text);
+    async fn receive_message(&self, from: PeerAddress, content: MessageContent) {
         let message = ChatMessage::create(SentBy::Peer, content.clone());
-
         self.persist_message_to_chat(&from, message).await;
-
         self.emit_message_received_event(from, content).await;
     }
 }

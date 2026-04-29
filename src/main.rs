@@ -1,9 +1,8 @@
 use application::ports::event_receiver::EventReceiverFactory;
 use application::ports::event_sender::EventSender;
-use application::ports::inbound_message_handler::InboundMessageHandler;
+use application::ports::inbound_message_handler::InboundMessageReceiver;
 use application::ports::repository::chat::ChatRepository;
 use application::ports::repository::peer::PeerRepository;
-use application::ports::sender_service::MessageSenderService;
 use application::use_cases::{AddPeer, ConnectAndResend, ReceiveMessage, SendMessage};
 use clap::Parser;
 use domain::peer::PeerAddress;
@@ -16,6 +15,7 @@ use presentation::app::TuiAppState;
 use presentation::user_command::UserCommand;
 use std::sync::Arc;
 use tokio::sync::mpsc;
+use tokio::sync::mpsc::Receiver;
 
 #[derive(Parser)]
 #[command(name = "peer-pressure", about = "P2P chat application")]
@@ -37,24 +37,24 @@ struct Cli {
 async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
-    // 1. Event bus
     let event_bus = Arc::new(BroadcastEventBus::new(256));
 
-    // 2. Repositories
+    // Repos
     let peer_repo = Arc::new(FilePeerRepository::new(&cli.data_dir));
     let chat_repo = Arc::new(FileChatRepository::new(&cli.data_dir));
     peer_repo.load().await?;
     chat_repo.load().await?;
 
-    // 3. Use cases
-    let receive_message = Arc::new(ReceiveMessage::new(
-        chat_repo.clone() as Arc<FileChatRepository>,
-        event_bus.clone() as Arc<BroadcastEventBus>,
-    ));
-
+    // Outbound Network Service
     let sender_service = Arc::new(TcpOutboundConnectionService::new(
         cli.port,
         event_bus.clone() as Arc<dyn EventSender>,
+    ));
+
+    // Use cases
+    let receive_message = Arc::new(ReceiveMessage::new(
+        chat_repo.clone() as Arc<FileChatRepository>,
+        event_bus.clone() as Arc<BroadcastEventBus>,
     ));
 
     let send_message_uc = SendMessage::new(
@@ -74,26 +74,23 @@ async fn main() -> anyhow::Result<()> {
         event_bus.clone() as Arc<BroadcastEventBus>,
     );
 
-    // 4. Inbound listener
+    // Inbound Network Listener
     let bind_ip: std::net::IpAddr = cli.bind.parse()?;
     let inbound_listener = TcpInboundListener::new(
         bind_ip,
         cli.port,
-        receive_message as Arc<dyn InboundMessageHandler>,
+        receive_message as Arc<dyn InboundMessageReceiver>,
         event_bus.clone() as Arc<dyn EventSender>,
     );
 
-    // 5. Command channel (TUI -> main)
+    // Command channel (TUI -> main)
     let (command_tx, mut command_rx) = mpsc::channel::<UserCommand>(64);
 
-    // 6. Subscribe TUI to events
-    let ui_event_rx = event_bus.subscribe();
-
-    // 7. Load initial state into App
-    let mut app = TuiAppState::new();
+    // Load initial state into Tui App
+    let mut tui_app = TuiAppState::new();
     if let Ok(peers) = peer_repo.list().await {
         for peer in peers {
-            app.add_peer(peer.address());
+            tui_app.add_peer(peer.address());
         }
     }
     if let Ok(chats) = chat_repo.list().await {
@@ -102,26 +99,53 @@ async fn main() -> anyhow::Result<()> {
                 let sent_by_me = matches!(msg.sent_by(), domain::message::SentBy::Me);
                 let delivered =
                     matches!(msg.delivery_status(), domain::message::DeliveryStatus::Sent);
-                app.add_message(&chat.peer, &msg.content, sent_by_me, delivered);
+                tui_app.add_message(&chat.peer, &msg.content, sent_by_me, delivered);
             }
         }
     }
 
-    // 8. Spawn inbound listener
+    // Spawn the inbound listener
     tokio::spawn(async move {
         if let Err(e) = inbound_listener.listen().await {
             eprintln!("Listener error: {e}");
         }
     });
 
-    // 9. Spawn TUI
+    // Spawn TUI
     tokio::spawn(async move {
-        if let Err(e) = presentation::tui::run(app, ui_event_rx, command_tx).await {
+        let ui_event_rx = event_bus.subscribe();
+        if let Err(e) = presentation::tui::run(tui_app, ui_event_rx, command_tx).await {
             eprintln!("TUI error: {e}");
         }
     });
 
-    // 10. Command processing loop
+    command_processing_loop(
+        &mut command_rx,
+        send_message_uc,
+        add_peer_uc,
+        connect_and_resend_uc,
+        sender_service,
+    )
+    .await;
+
+    Ok(())
+}
+
+async fn command_processing_loop(
+    command_rx: &mut Receiver<UserCommand>,
+    send_message_uc: SendMessage<
+        FileChatRepository,
+        TcpOutboundConnectionService,
+        BroadcastEventBus,
+    >,
+    add_peer_uc: AddPeer<FilePeerRepository, BroadcastEventBus>,
+    connect_and_resend_uc: ConnectAndResend<
+        FileChatRepository,
+        TcpOutboundConnectionService,
+        BroadcastEventBus,
+    >,
+    sender_service: Arc<TcpOutboundConnectionService>,
+) {
     while let Some(cmd) = command_rx.recv().await {
         match cmd {
             UserCommand::SendMessage { peer, text } => {
@@ -132,9 +156,9 @@ async fn main() -> anyhow::Result<()> {
             UserCommand::AddPeer { address } => {
                 let addr = PeerAddress::new(address.into());
                 let _ = add_peer_uc.execute(addr.clone()).await;
-                if let Err(e) = sender_service.connect(addr).await {
-                    eprintln!("Connect error: {e}");
-                }
+                // if let Err(e) = sender_service.connect(addr).await {
+                //     eprintln!("Connect error: {e}");
+                // }
             }
             UserCommand::ConnectToPeer { peer } => {
                 if let Err(e) = connect_and_resend_uc.execute(peer).await {
@@ -144,6 +168,4 @@ async fn main() -> anyhow::Result<()> {
             UserCommand::Quit => break,
         }
     }
-
-    Ok(())
 }

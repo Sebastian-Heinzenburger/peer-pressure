@@ -25,6 +25,14 @@ impl From<&MessageContent> for WireChatMessageContent {
     }
 }
 
+impl From<WireChatMessageContent> for MessageContent {
+    fn from(content: WireChatMessageContent) -> Self {
+        match content {
+            WireChatMessageContent::Text(t) => Self::Text(t),
+        }
+    }
+}
+
 impl From<&ChatMessage> for WireMessage {
     fn from(value: &ChatMessage) -> Self {
         Self::ChatMessage(WireChatMessage {

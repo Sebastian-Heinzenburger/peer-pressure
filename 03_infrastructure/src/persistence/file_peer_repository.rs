@@ -46,27 +46,35 @@ impl FilePeerRepository {
             .map_err(|e| RepositoryError::PersistenceError(e.to_string()))?
         {
             let peer_file = entry.path().join("peer.json");
-            if peer_file.exists() {
-                if let Ok(contents) = tokio::fs::read_to_string(&peer_file).await {
-                    if let Ok(dto) = serde_json::from_str::<PeerDto>(&contents) {
-                        if let Ok(peer) = Peer::try_from(dto) {
-                            cache.insert(peer.address().to_string(), peer);
-                        }
-                    }
-                }
+
+            if !peer_file.exists() {
+                continue;
             }
+
+            let peer = Self::peer_from_file(&peer_file).await?;
+            cache.insert(peer.address().to_string(), peer);
         }
 
         Ok(())
     }
-}
 
-#[async_trait]
-impl PeerRepository for FilePeerRepository {
-    async fn add(&self, peer: Peer) -> Result<(), RepositoryError> {
-        let address_str = peer.address().to_string();
+    async fn peer_from_file(peer_file: &PathBuf) -> Result<Peer, RepositoryError> {
+        let contents = tokio::fs::read_to_string(&peer_file)
+            .await
+            .map_err(|e| RepositoryError::PersistenceError(e.to_string()))?;
 
-        // Write to disk
+        let dto = serde_json::from_str::<PeerDto>(&contents)
+            .map_err(|e| RepositoryError::PersistenceError(e.to_string()))?;
+
+        let peer = Peer::from(dto);
+        Ok(peer)
+    }
+
+    async fn write_to_disk(
+        &self,
+        address_str: &String,
+        peer: &Peer,
+    ) -> Result<(), RepositoryError> {
         let dir = self.peer_dir(&address_str);
         tokio::fs::create_dir_all(&dir)
             .await
@@ -79,10 +87,26 @@ impl PeerRepository for FilePeerRepository {
         tokio::fs::write(self.peer_file(&address_str), json)
             .await
             .map_err(|e| RepositoryError::PersistenceError(e.to_string()))?;
+        Ok(())
+    }
 
-        // Update cache
+    async fn remove_from_disk(&self, address_str: &String) -> Result<(), RepositoryError> {
+        let dir = self.peer_dir(&address_str);
+        if dir.exists() {
+            tokio::fs::remove_dir_all(&dir)
+                .await
+                .map_err(|e| RepositoryError::PersistenceError(e.to_string()))?;
+        }
+        Ok(())
+    }
+}
+
+#[async_trait]
+impl PeerRepository for FilePeerRepository {
+    async fn add(&self, peer: Peer) -> Result<(), RepositoryError> {
+        let address_str = peer.address().to_string();
+        self.write_to_disk(&address_str, &peer).await?;
         self.cache.write().await.insert(address_str, peer);
-
         Ok(())
     }
 
@@ -99,13 +123,7 @@ impl PeerRepository for FilePeerRepository {
     async fn remove(&self, id: &PeerId) -> Result<(), RepositoryError> {
         let address_str = id.to_string();
 
-        // Remove from disk
-        let dir = self.peer_dir(&address_str);
-        if dir.exists() {
-            tokio::fs::remove_dir_all(&dir)
-                .await
-                .map_err(|e| RepositoryError::PersistenceError(e.to_string()))?;
-        }
+        self.remove_from_disk(&address_str).await?;
 
         // Remove from cache
         self.cache.write().await.remove(&address_str);

@@ -7,6 +7,7 @@ use domain::peer::{PeerAddress, PeerId};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
+use tokio::fs::DirEntry;
 use tokio::sync::RwLock;
 
 use super::dtos::MessageVecDto;
@@ -48,24 +49,55 @@ impl FileChatRepository {
             .map_err(|e| RepositoryError::PersistenceError(e.to_string()))?
         {
             let messages_file = entry.path().join("messages.json");
-            if messages_file.exists() {
-                if let Ok(contents) = tokio::fs::read_to_string(&messages_file).await {
-                    if let Ok(dto) = serde_json::from_str::<MessageVecDto>(&contents) {
-                        let messages: Vec<ChatMessage> = dto
-                            .messages
-                            .into_iter()
-                            .filter_map(|m| ChatMessage::try_from(m).ok())
-                            .collect();
-                        let dir_name = entry
-                            .file_name()
-                            .to_string_lossy()
-                            .to_string();
-                        cache.insert(dir_name, messages);
-                    }
-                }
+            if !messages_file.exists() {
+                continue;
             }
+
+            let (messages, peer_address) = Self::messages_from_file(entry, &messages_file).await?;
+            cache.insert(peer_address, messages);
         }
 
+        Ok(())
+    }
+
+    async fn messages_from_file(
+        entry: DirEntry,
+        messages_file: &PathBuf,
+    ) -> Result<(Vec<ChatMessage>, String), RepositoryError> {
+        let contents = tokio::fs::read_to_string(&messages_file)
+            .await
+            .map_err(|e| RepositoryError::PersistenceError(e.to_string()))?;
+
+        let dto = serde_json::from_str::<MessageVecDto>(&contents)
+            .map_err(|e| RepositoryError::PersistenceError(e.to_string()))?;
+
+        let messages: Vec<ChatMessage> = dto
+            .messages
+            .into_iter()
+            .filter_map(|m| ChatMessage::try_from(m).ok())
+            .collect();
+
+        let peer_id = entry.file_name().to_string_lossy().to_string();
+        Ok((messages, peer_id))
+    }
+
+    async fn write_to_disk(
+        &self,
+        peer_address: &String,
+        chat: &Chat,
+    ) -> Result<(), RepositoryError> {
+        let dir = self.data_dir.join("peers").join(&peer_address);
+        tokio::fs::create_dir_all(&dir)
+            .await
+            .map_err(|e| RepositoryError::PersistenceError(e.to_string()))?;
+
+        let dto = MessageVecDto::from(chat.messages.as_slice());
+        let json = serde_json::to_string_pretty(&dto)
+            .map_err(|e| RepositoryError::PersistenceError(e.to_string()))?;
+
+        tokio::fs::write(self.messages_file(&peer_address), json)
+            .await
+            .map_err(|e| RepositoryError::PersistenceError(e.to_string()))?;
         Ok(())
     }
 }
@@ -82,25 +114,9 @@ impl ChatRepository for FileChatRepository {
     }
 
     async fn save(&self, chat: Chat) -> Result<(), RepositoryError> {
-        let key = chat.peer.to_string();
-
-        // Write to disk
-        let dir = self.data_dir.join("peers").join(&key);
-        tokio::fs::create_dir_all(&dir)
-            .await
-            .map_err(|e| RepositoryError::PersistenceError(e.to_string()))?;
-
-        let dto = MessageVecDto::from(chat.messages.as_slice());
-        let json = serde_json::to_string_pretty(&dto)
-            .map_err(|e| RepositoryError::PersistenceError(e.to_string()))?;
-
-        tokio::fs::write(self.messages_file(&key), json)
-            .await
-            .map_err(|e| RepositoryError::PersistenceError(e.to_string()))?;
-
-        // Update cache
-        self.cache.write().await.insert(key, chat.messages);
-
+        let peer_address = chat.peer.to_string();
+        self.write_to_disk(&peer_address, &chat).await?;
+        self.cache.write().await.insert(peer_address, chat.messages);
         Ok(())
     }
 

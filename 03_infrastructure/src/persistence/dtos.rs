@@ -157,11 +157,9 @@ impl From<Peer> for PeerDto {
     }
 }
 
-impl TryFrom<PeerDto> for Peer {
-    type Error = ();
-
-    fn try_from(value: PeerDto) -> Result<Self, Self::Error> {
+impl From<PeerDto> for Peer {
+    fn from(value: PeerDto) -> Self {
         let peer_address = PeerAddress::from(value.address);
-        Ok(Peer::new(peer_address))
+        Peer::new(peer_address)
     }
 }

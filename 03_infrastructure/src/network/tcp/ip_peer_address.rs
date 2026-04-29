@@ -1,6 +1,6 @@
+use domain::peer::PeerAddress;
 use std::net::{AddrParseError, IpAddr};
 use std::str::FromStr;
-use domain::peer::PeerAddress;
 
 pub struct IpPeerAddress(IpAddr);
 
@@ -17,4 +17,3 @@ impl TryFrom<&PeerAddress> for IpPeerAddress {
         Ok(IpPeerAddress(IpAddr::from_str(&value.to_string())?))
     }
 }
-
