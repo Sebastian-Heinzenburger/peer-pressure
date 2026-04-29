@@ -61,3 +61,29 @@ where
             .await;
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::use_cases::test_helper::{MockChatRepository, MockEventSender};
+    use domain::message::DeliveryStatus;
+
+    #[tokio::test]
+    async fn receive_message_persists_and_emits() {
+        let chat_repo = Arc::new(MockChatRepository::new());
+        let events = Arc::new(MockEventSender::new());
+        let uc = ReceiveMessage::new(chat_repo.clone(), events.clone());
+        let peer = PeerAddress::new("5.6.7.8".into());
+        let content = MessageContent::Text("hey".into());
+
+        uc.receive_message(peer.clone(), content.clone()).await;
+
+        let chat = chat_repo.get_chat(&peer).await.unwrap();
+        assert_eq!(chat.messages.len(), 1);
+        assert_eq!(chat.messages[0].sent_by(), &SentBy::Peer);
+        assert_eq!(chat.messages[0].delivery_status(), &DeliveryStatus::Sent);
+
+        let evts = events.get().await;
+        assert_eq!(evts[0], AppEvent::MessageReceived { peer, content });
+    }
+}

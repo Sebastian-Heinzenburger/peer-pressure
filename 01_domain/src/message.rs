@@ -67,3 +67,28 @@ pub enum SentBy {
     Me,
     Peer,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn create_my_message_is_not_sent() {
+        let msg = ChatMessage::create(SentBy::Me, MessageContent::Text("hi".into()));
+        assert_eq!(msg.delivery_status(), &DeliveryStatus::NotSent);
+    }
+
+    #[test]
+    fn create_peer_message_is_sent() {
+        let msg = ChatMessage::create(SentBy::Peer, MessageContent::Text("hi".into()));
+        assert_eq!(msg.delivery_status(), &DeliveryStatus::Sent);
+    }
+
+    #[test]
+    fn mark_sent_transitions() {
+        let mut msg = ChatMessage::create(SentBy::Me, MessageContent::Text("hi".into()));
+        assert_eq!(msg.delivery_status(), &DeliveryStatus::NotSent);
+        msg.mark_sent();
+        assert_eq!(msg.delivery_status(), &DeliveryStatus::Sent);
+    }
+}

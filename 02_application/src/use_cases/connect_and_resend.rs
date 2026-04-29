@@ -74,3 +74,73 @@ where
         self.sender_service.connect(peer.clone()).await
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::use_cases::test_helper::{MockChatRepository, MockEventSender, MockMessageSenderService};
+    use domain::message::MessageContent;
+    use domain::peer::PeerAddress;
+
+    fn make_unsent_msg(text: &str) -> ChatMessage {
+        ChatMessage::create(SentBy::Me, MessageContent::Text(text.into()))
+    }
+
+    fn make_sent_msg(text: &str) -> ChatMessage {
+        let mut m = ChatMessage::create(SentBy::Me, MessageContent::Text(text.into()));
+        m.mark_sent();
+        m
+    }
+
+    #[tokio::test]
+    async fn resends_unsent_messages() {
+        let peer = PeerAddress::new("1.2.3.4".into());
+        let chat_repo = Arc::new(MockChatRepository::new());
+        let mut chat = Chat::create(peer.clone());
+        chat.add_message(make_unsent_msg("a"));
+        chat.add_message(make_unsent_msg("b"));
+        chat_repo.set_chat(chat).await;
+
+        let sender = Arc::new(MockMessageSenderService::new());
+        let events = Arc::new(MockEventSender::new());
+        let uc = ConnectAndResend::new(chat_repo.clone(), sender.clone(), events.clone());
+
+        uc.execute(peer.clone()).await.unwrap();
+
+        let chat = chat_repo.get_chat(&peer).await.unwrap();
+        assert!(chat.messages.iter().all(|m| m.delivery_status() == &DeliveryStatus::Sent));
+        assert_eq!(sender.sent.read().await.len(), 2);
+        assert_eq!(events.get().await[0], AppEvent::MessagesDelivered { peer });
+    }
+
+    #[tokio::test]
+    async fn skips_already_sent() {
+        let peer = PeerAddress::new("1.2.3.4".into());
+        let chat_repo = Arc::new(MockChatRepository::new());
+        let mut chat = Chat::create(peer.clone());
+        chat.add_message(make_sent_msg("old"));
+        chat.add_message(make_unsent_msg("new"));
+        chat_repo.set_chat(chat).await;
+
+        let sender = Arc::new(MockMessageSenderService::new());
+        let events = Arc::new(MockEventSender::new());
+        let uc = ConnectAndResend::new(chat_repo.clone(), sender.clone(), events.clone());
+
+        uc.execute(peer.clone()).await.unwrap();
+
+        assert_eq!(sender.sent.read().await.len(), 1); // only "new" resent
+    }
+
+    #[tokio::test]
+    async fn connect_failure() {
+        let peer = PeerAddress::new("1.2.3.4".into());
+        let chat_repo = Arc::new(MockChatRepository::new());
+        let sender = Arc::new(MockMessageSenderService::failing());
+        let events = Arc::new(MockEventSender::new());
+        let uc = ConnectAndResend::new(chat_repo, sender, events.clone());
+
+        let result = uc.execute(peer).await;
+        assert!(result.is_err());
+        assert!(events.get().await.is_empty());
+    }
+}

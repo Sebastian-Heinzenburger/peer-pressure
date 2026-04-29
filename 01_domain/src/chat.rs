@@ -1,6 +1,7 @@
 use crate::message::ChatMessage;
 use crate::peer::PeerId;
 
+#[derive(Clone)]
 pub struct Chat {
     pub peer: PeerId,
     pub messages: Vec<ChatMessage>,

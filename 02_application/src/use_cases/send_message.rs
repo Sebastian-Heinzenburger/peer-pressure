@@ -77,3 +77,55 @@ where
         self.chat_repository.save(chat).await
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::use_cases::test_helper::{MockChatRepository, MockEventSender, MockMessageSenderService};
+    use domain::message::DeliveryStatus;
+    use domain::peer::PeerAddress;
+
+    #[tokio::test]
+    async fn send_message_success() {
+        let chat_repo = Arc::new(MockChatRepository::new());
+        let sender = Arc::new(MockMessageSenderService::new());
+        let events = Arc::new(MockEventSender::new());
+        let uc = SendMessage::new(chat_repo.clone(), sender.clone(), events.clone());
+        let peer = PeerAddress::new("1.2.3.4".into());
+
+        uc.execute(peer.clone(), "hello".into()).await.unwrap();
+
+        let chat = chat_repo.get_chat(&peer).await.unwrap();
+        assert_eq!(chat.messages.len(), 1);
+        assert_eq!(chat.messages[0].delivery_status(), &DeliveryStatus::Sent);
+        assert_eq!(sender.sent.read().await.len(), 1);
+
+        let evts = events.get().await;
+        assert_eq!(evts[0], AppEvent::MessageSent {
+            peer,
+            content: MessageContent::Text("hello".into()),
+            delivered: true,
+        });
+    }
+
+    #[tokio::test]
+    async fn send_message_network_failure() {
+        let chat_repo = Arc::new(MockChatRepository::new());
+        let sender = Arc::new(MockMessageSenderService::failing());
+        let events = Arc::new(MockEventSender::new());
+        let uc = SendMessage::new(chat_repo.clone(), sender, events.clone());
+        let peer = PeerAddress::new("1.2.3.4".into());
+
+        uc.execute(peer.clone(), "hello".into()).await.unwrap();
+
+        let chat = chat_repo.get_chat(&peer).await.unwrap();
+        assert_eq!(chat.messages[0].delivery_status(), &DeliveryStatus::NotSent);
+
+        let evts = events.get().await;
+        assert_eq!(evts[0], AppEvent::MessageSent {
+            peer,
+            content: MessageContent::Text("hello".into()),
+            delivered: false,
+        });
+    }
+}
