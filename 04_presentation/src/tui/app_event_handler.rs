@@ -1,4 +1,4 @@
-use crate::app::TuiAppState;
+use crate::tui::app_state::TuiAppState;
 use application::events::AppEvent;
 
 pub fn handle(app: &mut TuiAppState, event: AppEvent) {

@@ -11,7 +11,7 @@ use infrastructure::network::tcp::unidirectional::receiver::TcpInboundListener;
 use infrastructure::network::tcp::unidirectional::sender::TcpOutboundConnectionService;
 use infrastructure::persistence::file_chat_repository::FileChatRepository;
 use infrastructure::persistence::file_peer_repository::FilePeerRepository;
-use presentation::app::TuiAppState;
+use presentation::tui::app_state::TuiAppState;
 use presentation::user_command::UserCommand;
 use std::sync::Arc;
 use tokio::sync::mpsc;
@@ -88,21 +88,7 @@ async fn main() -> anyhow::Result<()> {
 
     // Load initial state into Tui App
     let mut tui_app = TuiAppState::new();
-    if let Ok(peers) = peer_repo.list().await {
-        for peer in peers {
-            tui_app.add_peer(peer.address());
-        }
-    }
-    if let Ok(chats) = chat_repo.list().await {
-        for chat in chats {
-            for msg in &chat.messages {
-                let sent_by_me = matches!(msg.sent_by(), domain::message::SentBy::Me);
-                let delivered =
-                    matches!(msg.delivery_status(), domain::message::DeliveryStatus::Sent);
-                tui_app.add_message(&chat.peer, &msg.content, sent_by_me, delivered);
-            }
-        }
-    }
+    load_state_into_tui_app(&mut tui_app, chat_repo, peer_repo).await;
 
     // Spawn the inbound listener
     tokio::spawn(async move {
@@ -129,6 +115,28 @@ async fn main() -> anyhow::Result<()> {
     .await;
 
     Ok(())
+}
+
+async fn load_state_into_tui_app(
+    tui_app: &mut TuiAppState,
+    chat_repo: Arc<FileChatRepository>,
+    peer_repo: Arc<FilePeerRepository>,
+) {
+    if let Ok(peers) = peer_repo.list().await {
+        for peer in peers {
+            tui_app.add_peer(peer.address());
+        }
+    }
+    if let Ok(chats) = chat_repo.list().await {
+        for chat in chats {
+            for msg in &chat.messages {
+                let sent_by_me = matches!(msg.sent_by(), domain::message::SentBy::Me);
+                let delivered =
+                    matches!(msg.delivery_status(), domain::message::DeliveryStatus::Sent);
+                tui_app.add_message(&chat.peer, &msg.content, sent_by_me, delivered);
+            }
+        }
+    }
 }
 
 async fn command_processing_loop(

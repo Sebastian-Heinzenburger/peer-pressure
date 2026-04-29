@@ -1,4 +1,4 @@
-use crate::app::{TuiAppState, InputMode};
+use crate::tui::app_state::{TuiAppState, InputMode};
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
@@ -126,7 +126,7 @@ fn render_status_bar(frame: &mut Frame, app: &TuiAppState, area: Rect) {
     let connected_count = app.connected_peers.len();
     let total_count = app.peers.len();
     let status = format!(
-        " Peers: {}/{} connected | Tab: switch peer | /add <ip>: add peer ",
+        " Peers: {}/{} connected | Tab: switch peer | /add <ip>: add peer | /connect: connect to selected peer ",
         connected_count, total_count
     );
     let status_bar = Paragraph::new(status).style(Style::default().fg(Color::DarkGray));

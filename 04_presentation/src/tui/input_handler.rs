@@ -1,4 +1,4 @@
-use crate::app::{InputMode, TuiAppState};
+use crate::tui::app_state::{InputMode, TuiAppState};
 use crate::user_command::UserCommand;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use tokio::sync::mpsc;

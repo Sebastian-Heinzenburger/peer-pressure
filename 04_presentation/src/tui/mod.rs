@@ -1,20 +1,22 @@
-use crate::app::TuiAppState;
-use crate::app_event_handler;
-use crate::event_handler;
-use crate::ui;
+use app_state::TuiAppState;
 use crate::user_command::UserCommand;
 use application::events::AppEvent;
 use crossterm::event::{Event, EventStream};
 use crossterm::execute;
 use crossterm::terminal::{
-    EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
+    disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
 };
 use futures::StreamExt;
 use ratatui::backend::CrosstermBackend;
 use ratatui::Terminal;
 use std::io;
 use tokio::sync::{broadcast, mpsc};
-use tokio::time::{Duration, interval};
+use tokio::time::{interval, Duration};
+
+pub mod ui;
+pub mod app_state;
+pub mod app_event_handler;
+pub mod input_handler;
 
 pub async fn run(
     mut app: TuiAppState,
@@ -36,7 +38,7 @@ pub async fn run(
         tokio::select! {
             event = event_stream.next() => {
                 if let Some(Ok(Event::Key(key))) = event {
-                    event_handler::handle_key(&mut app, key, &command_tx).await;
+                    input_handler::handle_key(&mut app, key, &command_tx).await;
                 }
             }
             app_event = event_rx.recv() => {
